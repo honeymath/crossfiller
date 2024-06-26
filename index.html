@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Cross-Filling Matrix Decomposition</title>
+ 
+</head>
+
+<body style="margin: 0; padding: 0; border: none; overflow: hidden;">
+    <div id="pixi-container"></div>
+    <script src="https.pixijs.download.v7.3.1.pixi.min.js"></script>
+    <script>
+        // Set up Pixi.js application
+        const app = new PIXI.Application({
+            width: window.innerWidth,
+            height: window.innerHeight,
+            backgroundColor: 0x000000,
+        });
+        document.getElementById('pixi-container').appendChild(app.view);
+	const rectangle_width = 80  // Please modify this number for global setting
+	const rectangle_height = 80
+	const node_radius = 20
+	const font_size = 20
+	const dragging_object = null // This is to register dragging_object so that one can interact with drop action.
+	const EntryWidth = 80;  // Modify as needed
+const EntryHeight = 80; // Modify as needed
+const EntryFontSize = 20; // Modify as needed
+
+
+
+
+	
+
+//	app.stage.interactive = true;
+	app.stage.sortableChildren = true;//allow zindex
+	let currentDraggingObject = null;  //The static attached to class DraggableRectangle
+
+	function handleResize() {
+	app.renderer.resize(window.innerWidth, window.innerHeight);
+	console.log("resizing!"+window.innerWidth+window.innerHeight);
+	}
+	// Attach the event listener
+	window.addEventListener('resize', handleResize);
+// Function to find GCD (Greatest Common Divisor) of two numbers
+function gcd(a, b) {
+    while (b !== 0) {
+	//console.log("fuckingGCD, a="+a+",  b="+b)
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
+// Function to add two fractions
+function addFractions(fraction1, fraction2) {
+    // Find LCM (Least Common Multiple) of the two denominators
+    let lcm = (fraction1.denominator * fraction2.denominator) / gcd(fraction1.denominator, fraction2.denominator);
+    
+    // Convert the fractions to have the LCM as the denominator
+    let num1 = fraction1.numerator * (lcm / fraction1.denominator);
+    let num2 = fraction2.numerator * (lcm / fraction2.denominator);
+    
+    // Sum the numerators
+    let resultNum = num1 + num2;
+    
+    // Simplify the result (if needed)
+    let resultGCD = gcd(resultNum, lcm);
+    
+    return {
+        numerator: resultNum / resultGCD,
+        denominator: lcm / resultGCD
+    };
+}
+function subtractFractions(fraction1, fraction2){
+    return addFractions(fraction1, {numerator: -fraction2.numerator, denominator: fraction2.denominator});
+}
+function simplifyFraction(numerator, denominator) {
+	console.log("simplifying fractions for numerator = "+numerator+", denominator="+denominator)
+    if(numerator == 0){
+	return{
+		numerator:0,
+		denominator:1
+	}
+    }
+    if(denominator == 0){
+	return{
+		numerator:1,
+		denominator:0
+	}
+    }
+    let g = gcd(numerator, denominator);
+    return {
+        numerator: numerator / g,
+        denominator: denominator / g
+    };
+}
+function multiplyFractions(fraction1, fraction2) {
+    let resultNum = fraction1.numerator * fraction2.numerator;
+    let resultDenom = fraction1.denominator * fraction2.denominator;
+    
+    return simplifyFraction(resultNum, resultDenom);
+}
+
+function divideFractions(fraction1, fraction2) {
+    // Multiplying fraction1 by the reciprocal of fraction2
+    let resultNum = fraction1.numerator * fraction2.denominator;
+    let resultDenom = fraction1.denominator * fraction2.numerator;
+    
+    return simplifyFraction(resultNum, resultDenom);
+}
+
+
+
+
+
+
+
+
+
+	function getX(){
+		return app.renderer.events.pointer.client.x +(window.pageXOffset || document.documentElement.scrollLeft)
+	}
+	function getY(){
+		return app.renderer.events.pointer.client.y +(window.pageYOffset || document.documentElement.scrollTop)
+	}
+        class DraggableRectangle {// This is the dragable input. 
+            constructor(x, y, container) {
+                this.RECTANGLE_WIDTH = rectangle_width;
+                this.RECTANGLE_HEIGHT = rectangle_height;
+                this.RECTANGLE_COLOR = 0x00ff00;
+                this.currentvalue = 0; // currentvalue
+                this.isDragging = false;
+                this.previousX = 0;
+                this.previousY = 0;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.acceleration = 0;
+                this.maxSpeed = 0;
+                this.lastingtime = 0;
+                this.startingacceleration = 3;
+                this.inertia = 500;
+                this.decayFactor = 0.0005;
+                this.accelerationScale = 5;
+                this.firctionCoefficient = 20;
+                this.unitlength = 50;
+                this.MaxWaitTimeForSliding = 500;
+                this.lastUpdateTime = Date.now();
+		this.scrollingFlag = false;//è¿™æ˜¯ä¸€ä¸ªæ•°å­—æ˜¯å¦scrollçš„ flag
+
+                this.rectangle = this.createDraggableRectangle(x, y,container);
+
+            	this.updateVelocityAndAcceleration=()=>{
+    	            const currentTime = Date.now();
+       		    const deltaTime = currentTime - this.lastUpdateTime;
+	                this.lastUpdateTime = currentTime;
+
+	                //const currentX = app.renderer.plugins.interaction.pointer.client.x;
+	                //const currentY = app.renderer.plugins.interaction.pointer.client.y;
+			const currentX = getX()
+			const currentY = getY()
+
+	                this.velocityX = (currentX - this.previousX) / deltaTime;
+	                this.velocityY = (currentY - this.previousY) / deltaTime;
+	                this.lastingtime += deltaTime;
+	                if (this.isDragging) {
+	                    this.updatedcurrentvalue = this.currentvalue + this.velocityX * (this.startingacceleration + Math
+                        .abs(this.acceleration)) * deltaTime / this.unitlength;
+       		             if (!isNaN(this.updatedcurrentvalue)) {
+	                        this.currentvalue = this.updatedcurrentvalue
+       		             }
+	                }
+        	        this.previousX = currentX;
+	                this.previousY = currentY;
+
+	                if (this.isDragging) {
+	                    this.maxSpeed = Math.max(this.maxSpeed, Math.abs(this.velocityX));
+    	   	         }
+	                const decayFactorToUse = (this.maxSpeed < 0.01 && this.isDragging) ? this.decayFactor *
+	                    this.firctionCoefficient * (this.startingacceleration + Math.abs(this.acceleration)) : this
+                    .decayFactor * (this.startingacceleration + Math.abs(this.acceleration));
+	                this.updatedAcceleration = this.acceleration - Math.sign(this.acceleration) *
+                    decayFactorToUse * deltaTime;
+        	        if (this.acceleration == 0 || Math.sign(this.updatedAcceleration) === Math.sign(this.acceleration)) {
+	                    this.acceleration = this.updatedAcceleration;
+        	        } else {
+	                    this.acceleration = 0;
+       		         }
+			if(!this.isDragging && this.scrollingFlag){
+	       	         	this.updatedcurrentvalue = this.currentvalue + this.acceleration * deltaTime / this.inertia;
+       			         if (!isNaN(this.updatedcurrentvalue)) {
+               			     this.currentvalue = this.updatedcurrentvalue
+	                	}
+			}
+        	           this.rectangle.children[0].text = Math.floor(this.currentvalue)//this.currentvalue.toFixed(0);
+
+	                  }
+            }
+
+            createDraggableRectangle(x, y, container = app.stage) {
+                const rect = new PIXI.Graphics();
+                rect.beginFill(this.RECTANGLE_COLOR);
+                rect.drawRect(0, 0, this.RECTANGLE_WIDTH,
+                    this.RECTANGLE_HEIGHT);
+                rect.endFill();
+                rect.x = x;
+                rect.y = y;
+                rect.interactive = true;
+                rect.buttonMode = true;
+                container.addChild(rect);
+
+                const text = new PIXI.Text('0', {
+                    fontFamily: 'Arial',
+                    fontSize: font_size,
+                    fill: 'red',
+                    align: 'center',
+                });
+		// Set text to the middle of rectangle
+                text.anchor.set(0.5);
+		text.x = this.RECTANGLE_WIDTH/2;
+		text.y = this.RECTANGLE_HEIGHT/2;
+                rect.addChild(text);
+
+                rect.on('pointerdown', (event) => this.pointerDownHandler(event));
+ //               rect.on('pointerup', () => this.pointerUpHandler());
+                rect.on('pointerupoutside', () => this.pointerUpOutsideHandler());
+
+                return rect;
+            }
+
+            pointerDownHandler(event) {
+                this.isDragging = true;
+      		app.ticker.add(
+                    this.updateVelocityAndAcceleration
+                );
+		currentDraggingObject = this;
+                this.lastUpdateTime = Date.now();
+//                this.previousX = app.renderer.plugins.interaction.pointer.client.x;
+//                this.previousY = app.renderer.plugins.interaction.pointer.client.y;
+                this.previousX = getX();
+                this.previousY = getY();
+                this.maxSpeed = 0;
+                this.lastingtime = 0;
+                this.currentvalue += 1;
+            }
+
+            stopDragging() {
+                this.isDragging = false;
+		app.ticker.remove(this.updateVelocityAndAcceleration);
+		this.scrollingFlag = false //in general, the number should not scorling
+                if (this.lastingtime < this.MaxWaitTimeForSliding) {
+                    this.acceleration += this.velocityX * this.accelerationScale * (this.startingacceleration + Math
+                        .abs(this.acceleration));
+			this.scrollingFlag = true //now the numbers are scorlling
+                }
+                this.lastingtime = 0;
+                this.maxSpeed = 0;
+         //       this.logVelocity();
+            }
+
+            pointerUpOutsideHandler() {
+                this.pointerUpHandler();
+            }
+	    pointerUpHandler(){
+	    }
+
+
+        }
+//	app.stage.on('pointerup', () => {
+//    if (currentDraggingObject) {
+//        currentDraggingObject.stopDragging();
+//        currentDraggingObject = null; // Unregister the dragging object
+//    }
+//});
+
+var PointerUpEvent=[];// This is something for waiting any registered pointerup event
+window.addEventListener('pointerup', () => {
+    if (currentDraggingObject) {
+        currentDraggingObject.stopDragging();
+        currentDraggingObject = null; // Unregister the dragging object
+    }
+	for(let eventFunction of PointerUpEvent) {
+        eventFunction(); // Execute each function
+    }
+	PointerUpEvent.length = 0;
+});
+
+
+// Now create the dragable node 
+class DraggableNode {
+    constructor(x, y) {
+        this.CIRCLE_RADIUS = node_radius;
+        this.CIRCLE_COLOR = 0xff0000;
+        this.isDragging = false;
+        this.circle = this.createDraggableCircle(x, y);
+        // Registering the update function to PIXI's ticker
+this.updateNodePosition=()=>{
+	if (this.isDragging) {
+            const currentX = getX()// - this.CIRCLE_RADIUS;
+            const currentY = getY()// - this.CIRCLE_RADIUS;
+//            const currentX = app.renderer.plugins.interaction.pointer.client.x - this.CIRCLE_RADIUS;
+//            const currentY = app.renderer.plugins.interaction.pointer.client.y - this.CIRCLE_RADIUS;
+            
+            this.circle.x = currentX;
+            this.circle.y = currentY;
+	        }else{
+			console.log("trying to remove")
+			app.ticker.remove(this.updateNodePosition); // this is important, save resources	
+		}
+		if(this.movingevent){
+			this.movingevent()
+		}
+    	}
+       	     }
+    createDraggableCircle(x, y) {
+        const circle = new PIXI.Graphics();
+        circle.beginFill(this.CIRCLE_COLOR);
+        circle.drawCircle(0, 0, this.CIRCLE_RADIUS);
+        circle.endFill();
+        circle.x = x;
+        circle.y = y;
+        circle.interactive = true;
+        circle.buttonMode = true;
+        app.stage.addChild(circle);
+        circle.on('pointerdown', (event) => this.pointerDownHandler(event));
+        circle.on('pointerup', () => this.pointerUpHandler());
+        circle.on('pointerupoutside', () => this.pointerUpHandler());
+	circle.on('pointertap', (event) => this.pointerDoubleClick(event));  // Register the double click (tap) event
+
+        return circle;
+    }
+    pointerDownHandler(event) {
+        this.isDragging = true;
+	app.ticker.add(this.updateNodePosition);
+    }
+    pointerUpHandler() {
+        this.isDragging = false;
+    }
+   pointerDoubleClick(event) {
+        if (event.data.originalEvent.detail === 2) {  // Check if it's a double-click
+            if (this.doubleclickevent) {
+                this.doubleclickevent();
+            }
+        }
+    } 
+}
+
+
+
+
+
+class ListenerNode {
+    constructor(x, y) {
+        this.CIRCLE_RADIUS = node_radius;
+        this.CIRCLE_COLOR = 0x0000ff;
+        
+        this.dragging_object = null;  // Moved inside the class
+        
+        this.circle = this.createDraggableCircle(x, y);
+    }
+
+    updateNodePosition(x, y) {
+        this.circle.x = x;
+        this.circle.y = y;
+    }
+
+    createDraggableCircle(x, y) {
+        const circle = new PIXI.Graphics();
+        circle.beginFill(this.CIRCLE_COLOR);
+        circle.drawCircle(0, 0, this.CIRCLE_RADIUS);
+        circle.endFill();
+        circle.x = x;
+        circle.y = y;
+        circle.interactive = true;
+        circle.buttonMode = true;
+        app.stage.addChild(circle);
+        circle.on('pointermove', (event) => this.pointerMoveHandler(event));
+        circle.on('pointerdown', (event) => this.pointerDownHandler(event));
+        circle.on('pointerup', (event) => this.pointerUpHandler(event));
+        circle.on('pointerupoutside', (event) => this.pointerUpOutsideHandler(event));
+        return circle;
+    }
+
+    pointerDownHandler(event) {
+        if (this.pointerdown) {
+  		this.pointerdown()
+        }
+    }
+
+    pointerUpHandler(event) {
+        if (this.dragging_object && this.input) {
+            this.input(this.dragging_object);
+        }
+    }
+
+    pointerUpOutsideHandler(event) {
+        // Handle the logic for when the pointer is released outside of the element
+        // e.g., you might want to reset the dragging_object or some other state changes.
+        this.dragging_object = null;  // Reset the dragging object
+    }
+
+    pointerMoveHandler(event) {
+        // Handle the logic for when the pointer moves over the element
+        // e.g., changing the color, etc.
+    }
+}
+
+
+
+
+
+class DraggableArea {
+    constructor(x1, y1, x2, y2) {
+        this.topLeftNode = new DraggableNode(x1, y1);
+	this.x = x1//just remember these
+	this.y = y1//just remember these
+        this.bottomRightNode = new DraggableNode(x2, y2);
+        this.topRightNode = new ListenerNode(x2, y1);
+	this.topRightNode.pointerdown = ()=>{this.giveMatrix()}
+        this.bottomLeftNode = new ListenerNode(x1, y2);
+	this.bottomLeftNode.pointerdown = ()=>{this.giveMatrix()}
+
+        this.areaRectangle = new PIXI.Graphics();
+        app.stage.addChild(this.areaRectangle);
+
+        this.container = new PIXI.Container();
+        app.stage.addChild(this.container);
+
+        this.topLeftNode.movingevent = () => this.updatePosition();
+        this.bottomRightNode.movingevent = () => this.updateArea();
+
+	
+// Create a 9x9 matrix to store the DraggableRectangle instances
+        this.Matrix = Array(9).fill(null).map(() => Array(9).fill(null));
+
+        // Initialize rectangles
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < 9; j++) {
+                const rectX = i * rectangle_width+node_radius;
+                const rectY = j * rectangle_height+node_radius;
+                const rect = new DraggableRectangle(rectX, rectY, this.container);
+		this.Matrix[i][j] = rect;
+            }
+        }
+
+        this.updateArea();
+    }
+
+    updateArea() {
+	this.topRightNode.circle.x = this.bottomRightNode.circle.x;
+	this.topRightNode.circle.y = this.topLeftNode.circle.y;
+	this.bottomLeftNode.circle.x = this.topLeftNode.circle.x;
+	this.bottomLeftNode.circle.y = this.bottomRightNode.circle.y;
+        this.updateAreaRectangle();
+
+        // Update container position based on top-left draggable node
+        this.container.x = this.topLeftNode.circle.x;
+        this.container.y = this.topLeftNode.circle.y;
+	this.adjustVisibility();
+
+	// GPT: please also update the area's height and width, by using the position of two nodes, furthermore, write a function, if a dragable rectangle in that 9 x 9 matrix is outside of the area, then set it to invisible. if it is inside, set it visible.
+    }
+    updatePosition(){
+	this.bottomRightNode.circle.x += this.topLeftNode.circle.x - this.x 
+	this.bottomRightNode.circle.y += this.topLeftNode.circle.y - this.y 
+	this.x = this.topLeftNode.circle.x
+	this.y = this.topLeftNode.circle.y
+	this.updateArea()
+    }
+
+    updateAreaRectangle() {
+        this.areaRectangle.clear();
+
+        const x1 = this.topLeftNode.circle.x;
+        const y1 = this.topLeftNode.circle.y;
+        const x2 = this.bottomRightNode.circle.x;
+        const y2 = this.bottomRightNode.circle.y;
+
+        this.areaRectangle.beginFill(0xCCCCCC, 0.5);
+        this.areaRectangle.drawRect(x1, y1, x2 - x1, y2 - y1);
+        this.areaRectangle.endFill();
+    }
+
+	adjustVisibility() {
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < 9; j++) {
+                const rect = this.Matrix[i][j];
+//                const rectX = this.container.x + rect.rectangle.x + rectangle_width;
+//                const rectY = this.container.y + rect.rectangle.y + rectangle_height;
+
+                if (
+                   j >= this.rows || i >= this.columns
+                ) {
+                    rect.rectangle.visible = false;
+                } else {
+                    rect.rectangle.visible = true;
+                }
+            }
+        }
+    	}
+	get columns(){
+		return Math.floor((this.bottomRightNode.circle.x - this.container.x - node_radius)/rectangle_width)
+	}
+	get rows(){
+		return  Math.floor((this.bottomRightNode.circle.y - this.container.y - node_radius)/rectangle_height)
+	}
+	giveMatrix(){
+		let newMatrix = new DraggableMatrix(getX(),getY(),this.rows,this.columns,(i,j)=>{
+			return {
+				numerator:Math.floor(this.Matrix[j][i].currentvalue),
+				denominator:1
+			}
+		})
+		newMatrix.method = "born"
+		newMatrix.matrix[0][0].pointerdown()
+	}
+}
+
+
+class DraggableEntry {
+    constructor(value, x,y,color = 0x00ffff, transparency = 1,container = app.stage) {
+        this.container = container;
+        this.x = x;
+        this.y = y;
+
+        // Create a rectangle using PIXI's Graphics
+        this.graphics = new PIXI.Graphics();
+        this.color = color;
+
+
+        this.transparency = transparency;
+        this.graphics.position.set(x, y);
+
+        // Display the value
+        const style = new PIXI.TextStyle({
+            fontSize: EntryFontSize,
+            fill: 0xff0000, // color of text
+        });
+
+ 
+        const text = new PIXI.Text(this.textContent, style);
+        text.x = (EntryWidth - text.width) / 2;  // center the text
+        text.y = (EntryHeight - text.height) / 2; // center the text
+        this.graphics.addChild(text);
+
+        this.graphics.interactive = true;
+        this.graphics.buttonMode = true;
+
+        this.value = value; // automatically call the setter to set up
+
+        this.container.addChild(this.graphics);
+
+	this.graphics.on('pointerdown', () => {
+	    if (this.pointerdown) {
+	        this.pointerdown();
+	    }
+	});
+	this.graphics.on('pointerup', () => {
+	    if (this.pointerup) {
+	        this.pointerup();
+	    }
+	});
+	this.graphics.on('pointerout', () => {
+	    if (this.pointerout) {
+	        this.pointerout();
+	    }
+	});
+	this.graphics.on('pointermove', () => {
+	    if (this.pointermove) {
+	        this.pointermove();
+    	}
+	}); 
+
+    }
+//The following is to set transparencies.
+	updateposition(){
+		this.graphics.position.set(this.x, this.y);
+	}
+	get transparency() {
+        	return this.graphics.alpha;
+    	}
+    	set transparency(value) {
+        	this.graphics.alpha = value;
+    	}
+     get value() {
+        return this._value;
+    }
+
+    set value(newValue) {
+        this._value = newValue;
+        let textContent;
+        if (newValue.denominator === 1) {
+            textContent = `${newValue.numerator}`;
+        } else {
+            textContent = `${newValue.numerator}/${newValue.denominator}`;
+        }
+        this.graphics.children[0].text = textContent;    
+     }
+
+    // For color:
+    get color() {
+        return this._color;
+    }
+
+    set color(newColor) {
+        this._color = newColor;
+        this.graphics.clear();
+        this.graphics.beginFill(newColor);
+        this.graphics.drawRect(0, 0, EntryWidth, EntryHeight);
+        this.graphics.endFill();
+    }
+
+    // Function to change the container of the DraggableEntry
+    changeContainer(newContainer) {
+        this.container.removeChild(this.graphics);
+        newContainer.addChild(this.graphics);
+        this.container = newContainer;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+// The following code are the tests for draggable matrix, note that I have created a global variable. Please take caution.
+
+
+
+//The following code are for recording mouseover objects
+var MouseOverObjects = [];
+function registerObject(obj) {
+    if (MouseOverObjects.indexOf(obj) === -1) {
+        MouseOverObjects.push(obj);
+//	console.log("An object has been registered")
+//	console.log(MouseOverObjects)
+    }
+}
+
+function unregisterObject(obj) {
+    var index = MouseOverObjects.indexOf(obj);
+    if (index !== -1) {
+        MouseOverObjects.splice(index, 1);
+//	console.log("An object has been unregistered")
+//	console.log(MouseOverObjects)
+    }
+}
+
+class DraggableMatrix {
+    constructor(x, y, row, column, matrixfunction) {
+        this.x = x;
+        this.y = y;
+        this.row = row;
+        this.column = column;
+	this.markedrow = 0;//this is only useful for cross-filling
+	this.markedcolumn = 0;//this is only useful for cross-filling
+        this.register = [];
+	this.children = [];//This will recored its cross-filling chidrens
+	this.rearrange = Array(row).fill().map((_,index)=>index);//[0,1,2,...,row-1]// This is how to display a matrix
+	this.method = "cross-filling";// There are 6 method: normal, corss-filling, row-operation, column-operation, looted, looting, born(which will be handeled in the)
+	this.createNewCross = false;//control creation of new corss
+	this.frame = new PIXI.Graphics();
+	this.drawFrame();// Draw a rectangle frame around the matrix . Note that the matrix position is given by this.x, this.y, the matrix size is given by row*EntryWidth and column*EntryHeight
+	this.updatingEntry = 0;// This is counting entries currently under update.
+
+
+        this.matrix = new Array(row).fill().map((_, i) => 
+            new Array(column).fill().map((_, j) => {
+                let entryValueData = matrixfunction(i, j);
+		let entryValue = {
+			numerator:entryValueData.numerator,
+			denominator:entryValueData.denominator
+		}// The entryValueData could also have status, which allows to create some interactive entry.
+                let entry = new DraggableEntry(entryValue, x + j * EntryWidth, y + i * EntryHeight);
+          // register events for each entry, add console whatever
+		if(entryValueData.updatedValue){
+			this.updatingEntry += 1;//deng ji
+			entry.pointerdown = () => {
+				entry.value = entryValueData.updatedValue;
+				if(entryValueData.updatedValue.color){
+					entry.color = entryValueData.updatedValue.color
+				}
+				if(entryValueData.updatedValue.callback){
+					entryValueData.updatedValue.callback()//Callcallback
+				}
+				this.updatingEntry -=1;
+				if(this.updatingEntry==0){
+					if(this.father){
+						this.father.method = "cross-filling"// Will update in the future
+					}
+					this.method = "normal"//Set back to normal because it is useless to update a rank 1 matrix...
+				}
+				entry.pointerdown = () => {this.onEntryPointerDown(entry, i, j)}}//After one click, reset to original
+		}else{
+	                entry.pointerdown = () => {this.onEntryPointerDown(entry, i, j)}
+		}
+		if(entryValueData.color){
+			entry.color = entryValueData.color
+		}
+                entry.pointermove = () => { registerObject(entry) };
+                entry.pointerout = () => { unregisterObject(entry) };
+		entry.parent = this;// Please remember your father
+
+                return entry;
+            })
+        );
+    }
+    
+    newCrossFiller(relativeX,relativeY,i,j){//The relative is relative position a matrix would be created
+		let crossFiller = new DraggableMatrix(this.x+relativeX,this.y+relativeY, this.row, this.column,(k,l)=>{
+		if(k!=i && l!=j){
+			let aa = this.matrix[i][l].value.numerator
+			let bb = this.matrix[k][j].value.numerator
+			let ff = this.matrix[i][j].value.denominator
+			let dd = this.matrix[i][l].value.denominator
+			let ee = this.matrix[k][j].value.denominator
+			let cc = this.matrix[i][j].value.numerator
+	//	console.log(aa*bb*ff)
+	//	console.log(dd*ee*cc)
+			let fuck = simplifyFraction(aa*bb*ff,dd*ee*cc)
+	//	console.log(fuck)
+	//	console.log("what fuck")
+			let multipliedEntry = fuck
+		console.log(multipliedEntry)
+			return {
+				numerator:0,
+				denominator:1,
+				color:0xff0000,
+				updatedValue:{
+					numerator:fuck.numerator,
+					denominator:fuck.denominator,
+					color:0x00ff00,
+					callback:()=>{
+						this.matrix[k][l].value = subtractFractions(this.matrix[k][l].value,fuck);
+					}
+				}
+			}
+		}else{
+			return this.matrix[k][l].value
+		}
+	});
+	crossFiller.markedrow = i
+	crossFiller.markedcolumn = j //mark it for future use...
+	crossFiller.method = "normal" //it no need to cross fill the cross filled matrix
+	for(let row=0;row<this.row;row++){
+		this.matrix[row][j].value = {numerator:0,denominator:1};
+	}
+	for(let col=0;col<this.column;col++){
+		this.matrix[i][col].value = {numerator:0,denominator:1};
+	}//Taking cross out
+
+	crossFiller.father = this
+	this.method = "looted"
+	this.children.push(crossFiller)	
+    }
+    drawFrame(){
+	this.frame.clear();
+ 	const frameWidth = this.column * EntryWidth;
+        const frameHeight = this.row * EntryHeight;
+
+        this.frame.lineStyle(20, 0xffffff, 1); // Line width, color, alpha
+        this.frame.drawRect(this.x, this.y, frameWidth, frameHeight);
+	//code for reset frame position for this.x this.y and other updated data
+    }
+   resetPosition(){
+	for (let col = 0; col < this.column; col++) {
+            for (let row = 0; row < this.row; row++) {
+                this.matrix[row][col].x = this.x + col * EntryWidth;
+                this.matrix[row][col].y = this.y + this.rearrange[row] * EntryHeight;
+		this.matrix[row][col].updateposition();
+		this.matrix[row][col].graphics.zIndex = 1;  
+            }
+    	}
+	// also set position of frame
+    }
+
+    resetCrossPosition(i,j){
+	for (let col = 0; col < this.column; col++) {
+                this.matrix[i][col].x = this.x + col * EntryWidth;
+                this.matrix[i][col].y = this.y + this.rearrange[i] * EntryHeight;
+		this.matrix[i][col].updateposition();
+		this.matrix[i][col].graphics.zIndex = 1;  
+            }
+
+            for (let row = 0; row < this.row; row++) {
+		if(row != i){
+	                this.matrix[row][j].x = this.x + j * EntryWidth;
+	                this.matrix[row][j].y = this.y + this.rearrange[row] * EntryHeight;
+			this.matrix[row][j].updateposition();
+			this.matrix[row][j].graphics.zIndex = 1;
+		}
+            }
+    }
+   
+    HighlightForCrossMoving(){
+	this.drawFrame()
+	app.stage.addChild(this.frame)
+	this.createNewCross = false
+    }
+    UnhighlightForCrossMoving(){
+	app.stage.removeChild(this.frame)
+	this.createNewCross = true
+    }
+    onEntryPointerDown(entry, i, j) {
+	console.log(this.createNewCross)
+	this.initialX = getX();
+	this.initialY = getY();//initial X would not be updated while moving
+        this.previousX = getX();
+        this.previousY = getY();
+	//This tells Resetting after pointer up
+	PointerUpEvent.push( () => {
+            	//this.resetCrossPosition(i,j);
+		if(this.createNewCross && this.method=="cross-filling" && this.matrix[i][j].value.numerator!=0){
+			this.resetPosition();
+			this.newCrossFiller(getX()-this.initialX,getY()-this.initialY,i,j)
+		}else{
+            		this.resetPosition();
+			if(this.method=="born"){//handle the new born object
+				this.method = "cross-filling" // automatically cross-fill afterwards
+			}
+		}
+  		this.resetRegister();
+		app.stage.removeChild(this.frame)
+	}
+	);
+	this.entireMoving = ()=>{	
+            this.updatedX = getX();
+            this.updatedY = getY(); 
+	for (let col = 0; col < this.column; col++) {
+	    for (let row = 0; row < this.row; row++) {
+                this.matrix[row][col].x += (this.updatedX - this.previousX);
+                this.matrix[row][col].y += (this.updatedY - this.previousY);
+		this.matrix[row][col].updateposition();
+		this.matrix[row][col].graphics.zIndex = -1;
+            }
+        } 
+	this.x += this.updatedX - this.previousX
+	this.y += this.updatedY - this.previousY
+            this.previousX = this.updatedX;
+            this.previousY = this.updatedY;
+	}
+        // Depending on your dragging mode (only handling crossMoving for now)
+        this.crossMoving = () => {
+            this.updatedX = getX();
+            this.updatedY = getY(); 
+	    if(this.updatedX < this.initialX - this.column*EntryWidth || this.updatedX > this.initialX + this.column*EntryWidth || this.updatedY < this.initialY - this.row*EntryHeight || this.updatedY > this.initialY + this.row*EntryHeight){
+		this.UnhighlightForCrossMoving();
+	    }else{
+		this.HighlightForCrossMoving();
+	    }
+
+            // Update positions based on the difference
+            for (let col = 0; col < this.column; col++) {
+                this.matrix[i][col].x += (this.updatedX - this.previousX);
+                this.matrix[i][col].y += (this.updatedY - this.previousY);
+		this.matrix[i][col].updateposition();
+		this.matrix[i][col].graphics.zIndex = -1;
+            }
+
+            for (let row = 0; row < this.row; row++) {
+		if(row != i){
+                	this.matrix[row][j].x += (this.updatedX - this.previousX);
+	                this.matrix[row][j].y += (this.updatedY - this.previousY);
+			this.matrix[row][j].updateposition();
+			this.matrix[row][j].graphics.zIndex = -1;
+		}
+            }
+
+            
+            this.previousX = this.updatedX;
+            this.previousY = this.updatedY;
+        };
+	if(this.method=="cross-filling"){
+		if(this.updatingEntry == 0 && this.matrix[i][j].value.numerator!=0){
+		        this.addItemToRegister(this.crossMoving);
+		}else{	
+	        	this.addItemToRegister(this.entireMoving);
+		}
+	}
+	if(this.method=="normal" || this.method=="looted" || this.method=="born"){
+	        this.addItemToRegister(this.entireMoving);
+	}
+    }
+
+
+    addItemToRegister(func) {
+        app.ticker.add(func);
+        this.register.push(func);
+    }
+
+    resetRegister() {
+        for (let func of this.register) {
+            app.ticker.remove(func);
+        }
+        this.register = [];
+    }
+}
+
+
+
+
+
+
+// Here is the code to create some examples
+
+function initializeMatrix() {
+            function matrixFunction(i, j) {
+                return {
+                    numerator: i + j,
+                    denominator: 1
+                };
+            }
+
+            let draggableMatrix = new DraggableMatrix(250, 250, 4, 4, matrixFunction);
+        }
+
+        // Call the function to initialize and display the matrix
+  //      initializeMatrix();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//const entry = new DraggableEntry({numerator:5,denominator:3},20,30,0xff0000,0.5)
+
+
+//The following are for inputs
+const area = new DraggableArea(100, 100, 400, 400);
+
+
+
+// Example usage
+// Example usage
+//const area = new DraggableArea(100, 100, 400, 400);
+
+// Example usage
+//const circle = new DraggableNode(300, 300);
+//circle.doubleclickevent = ()=>{console.log("double clicked.")}
+//circle.movingevent = ()=>{console.log("I am moving")}
+
+        // Create instances of DraggableRectangle
+//        const rect1 = new DraggableRectangle(150, 150);
+//        const rect2 = new DraggableRectangle(450, 150);
+//        const rect3 = new DraggableRectangle(150, 450);
+//        const rect4 = new DraggableRectangle(450, 450);
+ //       const rect5 = new DraggableRectangle(750, 150);
+  //      const rect6 = new DraggableRectangle(750, 450);
+//	const rect7 = new DraggableRectangle(150, 750);
+ //       const rect8 = new DraggableRectangle(450, 750);
+  //      const rect9 = new DraggableRectangle(750, 750);
+//const din = new DraggableInputNode();
+
+    </script>
+</body>
+
+</html>
+
+
+
+
